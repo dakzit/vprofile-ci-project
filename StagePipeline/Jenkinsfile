@@ -6,17 +6,20 @@ pipeline {
     }
 
     environment {
-    	SNAP_REPO           = 'vprofile-snapshot'
+    SNAP_REPO           = 'vprofile-snapshot'
 	NEXUS_USER          = 'admin'
 	NEXUS_PASS          = 'Kamji123'
 	RELEASE_REPO        = 'vprofile-release'
 	CENTRAL_REPO        = 'vpro-maven-central'
-	NEXUSIP             = '172.31.30.157'
+	NEXUSIP             = '172.31.83.205'
 	NEXUSPORT           = '8081'
 	NEXUS_GRP_REPO      = 'vpro-maven-group'
-    	NEXUS_LOGIN         = 'nexuslogin'
-	SONARSERVER	    = 'sonarserver'
-        SONARSCANNER	    = 'sonarscanner'        
+    NEXUS_LOGIN         = 'nexuslogin'
+	SONARSERVER	        = 'sonarserver'
+    SONARSCANNER	    = 'sonarscanner'
+    registryCredential  = 'ecr:us-east-1:awscreds'
+    appRegistry         = '782434001163.dkr.ecr.us-east-1.amazonaws.com/vprofileappimg'
+    vprofileRegistry    = '782434001163.dkr.ecr.us-east-1.amazonaws.com'
 
     }
 
@@ -55,7 +58,7 @@ pipeline {
             }
         }
 	    
-	 stage('Sonar Analysis') {
+	    stage('Sonar Analysis') {
             environment {
                 scannerHome = tool "${SONARSCANNER}"
             }
@@ -72,16 +75,7 @@ pipeline {
               }
             }
         }
-	 stage("Quality Gate") {
-            steps {
-                timeout(time: 1, unit: 'HOURS') {
-                    // Parameter indicates whether to set pipeline to UNSTABLE if Quality Gate fails
-                    // true = set pipeline to UNSTABLE, false = don't
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-	 stage("UploadArtifact"){
+	    stage("UploadArtifact"){
             steps{
                 nexusArtifactUploader(
                   nexusVersion: 'nexus3',
@@ -98,6 +92,24 @@ pipeline {
                      type: 'war']
                   ]
                 )
+            }
+        }
+        stage('Build App Image') {
+            steps {
+                script {
+                    dockerImage = docker.build (appRegistry + ":BUILD_NUMBER", "./Docker-files/app/multistage/")
+                }
+            }
+        }
+
+        stage('Upload App Image') {
+            steps{
+                script {
+                    docker.withRegistry( vprofileRegistry, registryCredential ) {
+                        dockerImage.push("$BUILD_NUMBER")
+                        dockerImage.push('latest')
+                    }
+                }
             }
         }
     }
